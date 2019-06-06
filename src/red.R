@@ -6,34 +6,31 @@ set.seed(1234)
 
 
 library(keras)
-#install_keras()
 
 ## -------------------------------------------------------------------------------------
-## Cargar y pre-procesar im�genes
-train_dir      <- './cats_and_dogs_small/train/'
-test_dir       <- './cats_and_dogs_small/test/'
+## Cargar y pre-procesar imágenes
+train_dir <- './petfinder-adoption-prediction_pruebas/train_images/'
 
 # https://tensorflow.rstudio.com/keras/reference/image_data_generator.html
-train_datagen      <- image_data_generator(rescale = 1/255)
-test_datagen       <- image_data_generator(rescale = 1/255)
+# https://stackoverflow.com/questions/42443936/keras-split-train-test-set-when-using-imagedatagenerator
+train_datagen <- image_data_generator(rescale=1/255, validation_split=0.2)
 
 # https://tensorflow.rstudio.com/keras/reference/flow_images_from_directory.html
-train_data <- flow_images_from_directory(
+train_generator <- flow_images_from_directory(
   directory = train_dir,
   generator = train_datagen,
   target_size = c(150, 150),   # (w, h) --> (150, 150)
-  batch_size = 20,             # grupos de 20 im�genes
-  class_mode = "binary"        # etiquetas binarias
-)
+  batch_size = 20,             # grupos de 20 imágenes
+  class_mode='categorical',
+  subset='training') # set as training data
 
-test_data <- flow_images_from_directory(
-  directory = test_dir,
-  generator = test_datagen,
+test_generator <- flow_images_from_directory(
+  directory = train_dir,
+  generator = train_datagen,
   target_size = c(150, 150),   # (w, h) --> (150, 150)
-  batch_size = 20,             # grupos de 20 im�genes
-  class_mode = "binary"        # etiquetas binarias
-)
-
+  batch_size = 20,             # grupos de 20 imágenes
+  class_mode='categorical',
+  subset='validation') # set as validation data
 
 ## -------------------------------------------------------------------------------------
 ## Crear modelo
@@ -48,42 +45,42 @@ model <- keras_model_sequential() %>%
   layer_conv_2d(filters = 128, kernel_size = c(3, 3), activation = "relu") %>% layer_max_pooling_2d(pool_size = c(2, 2)) %>%
   layer_flatten() %>%
   layer_dense(units = 512, activation = "relu") %>%
-  layer_dense(units = 1, activation = "sigmoid")
+  layer_dense(units = 5, activation = "sigmoid")
 
 summary(model)
 
 # Compilar modelo
 # https://tensorflow.rstudio.com/keras/reference/compile.html
 model %>% compile(
-  loss = "binary_crossentropy",
+  loss = "categorical_crossentropy",
   optimizer = optimizer_rmsprop(lr = 1e-4),
   metrics = c("accuracy")
 )
 
+
 # Entrenamiento
 # https://tensorflow.rstudio.com/keras/reference/fit_generator.html
-history <- model %>%
-  fit_generator(
-    train_data,
-    steps_per_epoch = 100,
-    epochs = 5,
-    validation_steps = 50
-  )
+history <-  model %>% fit_generator(
+  train_generator,
+  steps_per_epoch = 100,
+  validation_steps = 50,
+  epochs = 5)
 
 # Evaluar modelo
 # https://tensorflow.rstudio.com/keras/reference/evaluate_generator.html
-model %>% evaluate_generator(test_data, steps = 25)
+model %>% evaluate_generator(test_generator, steps = 25)
 
-# Guardar modelo (HDF5)
-# https://tensorflow.rstudio.com/keras/reference/save_model_hdf5.html
-model %>% save_model_hdf5("dogsVScats.h5")
 
 # Visualizar entrenamiento
 plot(history)
 
 
-#predictions <- model %>% predict_classes(x_test)
 
 
-
-summary(model)
+test_generator$filenames
+predictions <- predict_generator(
+  model,
+  test_generator,
+  steps = test_generator$n/test_generator$batch_size
+)
+for(i in 1:100) { print(predictions[i])}
